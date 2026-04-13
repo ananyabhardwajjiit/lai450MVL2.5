@@ -144,3 +144,33 @@ echo ""
 echo "=== DONE ==="
 echo "OpenWebUI: http://<YOUR_VM_IP>:8080"
 echo "API: http://<YOUR_VM_IP>:8000/v1"
+
+echo ""
+echo "--- TEST VISION ---"
+
+VISION_OUTPUT=$(curl -s http://127.0.0.1:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "model.gguf",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {"type": "text", "text": "Describe this image briefly"},
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "https://raw.githubusercontent.com/ananyabhardwajjiit/lai450MVL2.5/refs/heads/main/test.jpg"
+            }
+          }
+        ]
+      }
+    ]
+  }')
+
+echo "$VISION_OUTPUT" | grep -o '"content":[^}]*'
+
+if ! echo "$VISION_OUTPUT" | grep -q "content"; then
+  echo "❌ Vision test failed"
+  exit 1
+fi

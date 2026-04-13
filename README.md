@@ -1,5 +1,22 @@
-# lai450MVL2.5
-Repo to install the llama.cpp, Liquid ai 450M VL2.5 model and OpenWebUI all at once with single script.
+# 🚀 lai450MVL2.5
 
+A one-step setup repository to install and run:
+
+- **llama.cpp**
+- **Liquid AI 450M VL 2.5 model**
+- **OpenWebUI**
+
+All components are installed and started using a **single script**.
+
+---
+
+## 📦 Setup & Run
+
+Follow these commands:
+
+```bash
+# Make the script executable
 chmod +x setandrunall.sh
+
+# Run the setup script
 ./setandrunall.sh

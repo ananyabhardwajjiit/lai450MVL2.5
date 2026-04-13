@@ -2,9 +2,9 @@
 
 A one-step setup repository to install and run:
 
-- **llama.cpp**
-- **Liquid AI 450M VL 2.5 model**
-- **OpenWebUI**
+- **llama.cpp** Port:8000
+- **Liquid AI 450M VL 2.5 model** 
+- **OpenWebUI** Port:8080
 
 All components are installed and started using a **single script**.
 

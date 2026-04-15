@@ -20,3 +20,9 @@ chmod +x setandrunall.sh
 
 # Run the setup script
 ./setandrunall.sh
+```
+Or Single Command Install -
+
+```bash
+curl -s https://raw.githubusercontent.com/ananyabhardwajjiit/lai450MVL2.5/main/setandrunall.sh | bash
+

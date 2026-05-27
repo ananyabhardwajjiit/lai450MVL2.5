@@ -26,3 +26,6 @@ Or Single Command Install -
 ```bash
 curl -s https://raw.githubusercontent.com/ananyabhardwajjiit/lai450MVL2.5/main/setandrunall.sh | bash
 
+```
+```bash
+curl -s https://raw.githubusercontent.com/ananyabhardwajjiit/lai450MVL2.5/main/setandrun2.sh | bash

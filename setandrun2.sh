@@ -20,11 +20,10 @@ sudo apt-get install -y \
 
 echo "=== Detecting CPU ==="
 THREADS=$(nproc)
-# Tuned for c3-standard-4
 if [ "$THREADS" -ge 4 ]; then
     LLAMA_THREADS=3
     LLAMA_PARALLEL=2
-    LLAMA_BATCH_THREADS=4   # use all cores for batching
+    LLAMA_BATCH_THREADS=4
 else
     LLAMA_THREADS=2
     LLAMA_PARALLEL=1
@@ -36,36 +35,30 @@ echo "Using batch threads: $LLAMA_BATCH_THREADS"
 echo "Using parallel slots: $LLAMA_PARALLEL"
 
 echo "=== Cloning llama.cpp (official ggml-org) ==="
-# Always set safe.directory for both root and current user before any git op
-sudo git config --global --add safe.directory "$LLAMA_DIR"
-git config --global --add safe.directory "$LLAMA_DIR"
-
-# Wipe any partial/stale clone so re-runs always start clean
+# Wipe any partial/stale clone so re-runs always start fresh
 sudo rm -rf "$LLAMA_DIR"
 sudo git clone https://github.com/ggml-org/llama.cpp.git "$LLAMA_DIR"
-cd "$LLAMA_DIR"
-sudo git fetch --tags
 
-# Resolve latest stable tag (bNNNN format) and check it out
+# Fix ownership so current user can run git/cmake without sudo and without safe.directory issues
+sudo chown -R "$(id -u):$(id -g)" "$LLAMA_DIR"
+
+cd "$LLAMA_DIR"
+git fetch --tags
+
 LATEST_TAG=$(git tag | grep -E '^b[0-9]{4,}$' | sort -t b -k2 -n | tail -1)
 echo "=== Checking out latest tag: $LATEST_TAG ==="
-sudo git checkout "$LATEST_TAG"
-
-# Confirm what we're building
+git checkout "$LATEST_TAG"
 echo "Building at: $(git describe --tags)"
 
 echo "=== Building llama.cpp ==="
-# Remove stale build dir if it exists (e.g. from a previous partial run)
-sudo rm -rf build
-sudo cmake -B build \
+cmake -B build \
     -DCMAKE_BUILD_TYPE=Release \
     -DGGML_NATIVE=ON
-sudo cmake --build build -j"$(nproc)"
+cmake --build build -j"$(nproc)"
 
-# Verify the binary exists before proceeding
 LLAMA_BIN="${LLAMA_DIR}/build/bin/llama-server"
 if [ ! -f "$LLAMA_BIN" ]; then
-    echo "ERROR: llama-server binary not found at $LLAMA_BIN — build may have failed."
+    echo "ERROR: llama-server binary not found at $LLAMA_BIN — build failed."
     exit 1
 fi
 echo "Binary OK: $LLAMA_BIN"

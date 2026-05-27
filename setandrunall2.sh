@@ -22,7 +22,7 @@ wget -q --show-progress -O llama.tar.gz "$LLAMA_URL"
 tar -xzf llama.tar.gz
 rm llama.tar.gz
 
-LLAMA_BIN="${LLAMA_DIR}/llama-server"
+LLAMA_BIN="${LLAMA_DIR}/llama-b8152/llama-server"
 chmod +x "$LLAMA_BIN"
 echo "Binary OK: $LLAMA_BIN"
 

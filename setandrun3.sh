@@ -10,7 +10,7 @@ SERVICE_NAME="lfm2-ocr"
 
 echo "=== Installing dependencies ==="
 sudo apt-get update -qq
-sudo apt-get install -y curl wget
+sudo apt-get install -y curl wget libgomp1
 
 echo "=== Detecting CPU ==="
 THREADS=$(nproc)

@@ -29,3 +29,8 @@ curl -s https://raw.githubusercontent.com/ananyabhardwajjiit/lai450MVL2.5/main/s
 ```
 ```bash
 curl -s https://raw.githubusercontent.com/ananyabhardwajjiit/lai450MVL2.5/main/setandrun2.sh | bash
+
+```
+```bash
+curl -s https://raw.githubusercontent.com/ananyabhardwajjiit/lai450MVL2.5/main/setandrun3.sh | bash
+```

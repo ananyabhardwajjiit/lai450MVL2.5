@@ -36,11 +36,13 @@ echo "Using batch threads: $LLAMA_BATCH_THREADS"
 echo "Using parallel slots: $LLAMA_PARALLEL"
 
 echo "=== Cloning llama.cpp (official ggml-org) ==="
-if [ ! -d "$LLAMA_DIR" ]; then
-    sudo git clone https://github.com/ggml-org/llama.cpp.git "$LLAMA_DIR"
-fi
-
+# Always set safe.directory for both root and current user before any git op
 sudo git config --global --add safe.directory "$LLAMA_DIR"
+git config --global --add safe.directory "$LLAMA_DIR"
+
+# Wipe any partial/stale clone so re-runs always start clean
+sudo rm -rf "$LLAMA_DIR"
+sudo git clone https://github.com/ggml-org/llama.cpp.git "$LLAMA_DIR"
 cd "$LLAMA_DIR"
 sudo git fetch --tags
 

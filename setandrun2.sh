@@ -95,7 +95,7 @@ ExecStart=${LLAMA_BIN} \
   -b 1024 \
   -ub 512 \
   --metrics \
-  -fa
+  -fa auto
 Restart=always
 RestartSec=5
 

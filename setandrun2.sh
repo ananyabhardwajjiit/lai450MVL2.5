@@ -26,8 +26,10 @@ echo "=== Detecting CPU ==="
 
 THREADS=$(nproc)
 
-if [ "$THREADS" -ge 8 ]; then
-LLAMA_THREADS=4
+# Tuned specifically for c3-standard-4
+
+if [ "$THREADS" -ge 4 ]; then
+LLAMA_THREADS=3
 LLAMA_PARALLEL=2
 else
 LLAMA_THREADS=2
@@ -41,17 +43,25 @@ echo "Using parallel slots: $LLAMA_PARALLEL"
 echo "=== Installing llama.cpp ==="
 
 if [ ! -d "$LLAMA_DIR" ]; then
-sudo git clone https://github.com/ggerganov/llama.cpp.git "$LLAMA_DIR"
+sudo git clone https://github.com/ggml-org/llama.cpp.git "$LLAMA_DIR"
 fi
 
 cd "$LLAMA_DIR"
 
+# Stable known-good build
+
+sudo git fetch --tags
+sudo git checkout b8152
+
+echo "=== Building llama.cpp ==="
+
 sudo cmake -B build 
+-DCMAKE_BUILD_TYPE=Release 
 -DGGML_NATIVE=ON 
 -DGGML_AVX2=ON 
 -DGGML_AVX512=ON
 
-sudo cmake --build build -j$(nproc)
+sudo cmake --build build -j"$(nproc)"
 
 echo "=== Downloading model ==="
 
@@ -84,13 +94,14 @@ ExecStart=${LLAMA_DIR}/build/bin/llama-server
 --mmproj ${MODEL_DIR}/mmproj.gguf 
 --host 0.0.0.0 
 --port 8000 
--c 4096 
+-c 2048 
 -t ${LLAMA_THREADS} 
 -tb ${LLAMA_THREADS} 
 -np ${LLAMA_PARALLEL} 
 -b 1024 
 -ub 512 
 --metrics 
+--no-context-shift 
 -fa
 
 Restart=always
@@ -100,19 +111,41 @@ RestartSec=5
 WantedBy=multi-user.target
 EOF
 
-echo "=== Starting service ==="
+echo "=== Reloading systemd ==="
 
 sudo systemctl daemon-reload
+
+echo "=== Enabling service ==="
+
 sudo systemctl enable ${SERVICE_NAME}
+
+echo "=== Restarting service ==="
+
 sudo systemctl restart ${SERVICE_NAME}
 
-sleep 5
+echo "=== Waiting for startup ==="
+
+sleep 8
 
 echo "=== Health Check ==="
 
 curl http://127.0.0.1:8000/health || true
 
 echo
+echo "=== Metrics Check ==="
+
+curl http://127.0.0.1:8000/metrics | head || true
+
+echo
 echo "=== DONE ==="
-echo "API: http://SERVER_IP:8000/v1/chat/completions"
-echo "Metrics: http://SERVER_IP:8000/metrics"
+
+echo "API:"
+echo "http://SERVER_IP:8000/v1/chat/completions"
+
+echo
+echo "Metrics:"
+echo "http://SERVER_IP:8000/metrics"
+
+echo
+echo "Logs:"
+echo "sudo journalctl -u ${SERVICE_NAME} -f"

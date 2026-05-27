@@ -26,8 +26,6 @@ echo "=== Detecting CPU ==="
 
 THREADS=$(nproc)
 
-# Tuned specifically for c3-standard-4
-
 if [ "$THREADS" -ge 4 ]; then
 LLAMA_THREADS=3
 LLAMA_PARALLEL=2
@@ -48,8 +46,6 @@ fi
 
 cd "$LLAMA_DIR"
 
-# Stable known-good build
-
 sudo git fetch --tags
 sudo git checkout b8152
 
@@ -57,9 +53,7 @@ echo "=== Building llama.cpp ==="
 
 sudo cmake -B build 
 -DCMAKE_BUILD_TYPE=Release 
--DGGML_NATIVE=ON 
--DGGML_AVX2=ON 
--DGGML_AVX512=ON
+-DGGML_NATIVE=ON
 
 sudo cmake --build build -j"$(nproc)"
 
@@ -125,7 +119,7 @@ sudo systemctl restart ${SERVICE_NAME}
 
 echo "=== Waiting for startup ==="
 
-sleep 8
+sleep 10
 
 echo "=== Health Check ==="
 

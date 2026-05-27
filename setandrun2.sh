@@ -40,6 +40,7 @@ if [ ! -d "$LLAMA_DIR" ]; then
     sudo git clone https://github.com/ggml-org/llama.cpp.git "$LLAMA_DIR"
 fi
 
+sudo git config --global --add safe.directory "$LLAMA_DIR"
 cd "$LLAMA_DIR"
 sudo git fetch --tags
 
@@ -52,6 +53,8 @@ sudo git checkout "$LATEST_TAG"
 echo "Building at: $(git describe --tags)"
 
 echo "=== Building llama.cpp ==="
+# Remove stale build dir if it exists (e.g. from a previous partial run)
+sudo rm -rf build
 sudo cmake -B build \
     -DCMAKE_BUILD_TYPE=Release \
     -DGGML_NATIVE=ON

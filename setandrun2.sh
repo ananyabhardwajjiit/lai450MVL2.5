@@ -13,25 +13,26 @@ echo "=== Installing dependencies ==="
 
 sudo apt update
 
-sudo apt install -y 
-curl 
-wget 
-git 
-build-essential 
-cmake 
-pkg-config 
-libcurl4-openssl-dev
+sudo apt install -y \
+    curl \
+    wget \
+    git \
+    build-essential \
+    cmake \
+    pkg-config \
+    libcurl4-openssl-dev
 
 echo "=== Detecting CPU ==="
 
 THREADS=$(nproc)
 
+# Tuned for c3-standard-4
 if [ "$THREADS" -ge 4 ]; then
-LLAMA_THREADS=3
-LLAMA_PARALLEL=2
+    LLAMA_THREADS=3
+    LLAMA_PARALLEL=2
 else
-LLAMA_THREADS=2
-LLAMA_PARALLEL=1
+    LLAMA_THREADS=2
+    LLAMA_PARALLEL=1
 fi
 
 echo "CPU threads: $THREADS"
@@ -41,7 +42,7 @@ echo "Using parallel slots: $LLAMA_PARALLEL"
 echo "=== Installing llama.cpp ==="
 
 if [ ! -d "$LLAMA_DIR" ]; then
-sudo git clone https://github.com/ggml-org/llama.cpp.git "$LLAMA_DIR"
+    sudo git clone https://github.com/ggml-org/llama.cpp.git "$LLAMA_DIR"
 fi
 
 cd "$LLAMA_DIR"
@@ -51,9 +52,9 @@ sudo git checkout b8152
 
 echo "=== Building llama.cpp ==="
 
-sudo cmake -B build 
--DCMAKE_BUILD_TYPE=Release 
--DGGML_NATIVE=ON
+sudo cmake -B build \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DGGML_NATIVE=ON
 
 sudo cmake --build build -j"$(nproc)"
 
@@ -64,11 +65,11 @@ sudo mkdir -p "$MODEL_DIR"
 cd "$MODEL_DIR"
 
 if [ ! -f model.gguf ]; then
-sudo wget -O model.gguf "$MODEL_URL"
+    sudo wget -O model.gguf "$MODEL_URL"
 fi
 
 if [ ! -f mmproj.gguf ]; then
-sudo wget -O mmproj.gguf "$MMPROJ_URL"
+    sudo wget -O mmproj.gguf "$MMPROJ_URL"
 fi
 
 echo "=== Creating systemd service ==="
@@ -83,20 +84,20 @@ Type=simple
 User=root
 WorkingDirectory=${LLAMA_DIR}
 
-ExecStart=${LLAMA_DIR}/build/bin/llama-server 
--m ${MODEL_DIR}/model.gguf 
---mmproj ${MODEL_DIR}/mmproj.gguf 
---host 0.0.0.0 
---port 8000 
--c 2048 
--t ${LLAMA_THREADS} 
--tb ${LLAMA_THREADS} 
--np ${LLAMA_PARALLEL} 
--b 1024 
--ub 512 
---metrics 
---no-context-shift 
--fa
+ExecStart=${LLAMA_DIR}/build/bin/llama-server \
+  -m ${MODEL_DIR}/model.gguf \
+  --mmproj ${MODEL_DIR}/mmproj.gguf \
+  --host 0.0.0.0 \
+  --port 8000 \
+  -c 2048 \
+  -t ${LLAMA_THREADS} \
+  -tb ${LLAMA_THREADS} \
+  -np ${LLAMA_PARALLEL} \
+  -b 1024 \
+  -ub 512 \
+  --metrics \
+  --no-context-shift \
+  -fa
 
 Restart=always
 RestartSec=5

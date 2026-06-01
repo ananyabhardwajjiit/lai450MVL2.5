@@ -1,143 +1,119 @@
 #!/usr/bin/env bash
+# setandrun2.sh - lfm-vision SOURCE BUILD installer
+#
+# What it installs:
+#   - llama.cpp BUILT FROM SOURCE with -DGGML_NATIVE=ON (CPU-tuned for YOUR chip)
+#   - Liquid AI 450M vision model
+#   - Status page on :80
+#   - OpenWebUI on :8080 (optional)
+#
+# Why build from source instead of using the prebuilt:
+#   - Prebuilt binaries are generic. Building with -DGGML_NATIVE compiles in
+#     instructions your specific CPU supports (AVX2, AVX-512, AMX, FMA, etc.)
+#     which can give a meaningful speedup for the 450M model.
+#   - You get the absolute latest llama.cpp the moment it's tagged.
+#   - You're not trusting a prebuilt tarball from the project.
+#
+# Trade-off: 5-10 minute compile time, needs build-essential + cmake.
+#
+# For a faster install (just prebuilt), see setandrunall.sh.
+#
+# Usage:
+#   ./setandrun2.sh
+#   ./setandrun2.sh --with-openwebui
+#   ./setandrun2.sh --update
+#   ./setandrun2.sh --uninstall
+#
 set -Eeuo pipefail
 
-MODEL_URL="https://huggingface.co/LiquidAI/LFM2.5-VL-450M-GGUF/resolve/main/LFM2.5-VL-450M-F16.gguf"
-MMPROJ_URL="https://huggingface.co/LiquidAI/LFM2.5-VL-450M-GGUF/resolve/main/mmproj-LFM2.5-VL-450m-F16.gguf"
-MODEL_DIR="/opt/lfm2"
-LLAMA_DIR="/opt/llama.cpp"
-SERVICE_NAME="lfm2-ocr"
+case "${BASH_SOURCE[0]:-}" in
+  /dev/stdin|"") SCRIPT_DIR="" ;;
+  *)            SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" ;;
+esac
+LFM_REPO_BASE="https://raw.githubusercontent.com/ananyabhardwajjiit/lai450MVL2.5/main"
+LFM_ENTRY_DIR="${SCRIPT_DIR:-}"
 
-echo "=== Installing dependencies ==="
-sudo apt-get update
-sudo apt-get install -y \
-    curl \
-    wget \
-    git \
-    build-essential \
-    cmake \
-    pkg-config \
-    libcurl4-openssl-dev
-
-echo "=== Detecting CPU ==="
-THREADS=$(nproc)
-if [ "$THREADS" -ge 4 ]; then
-    LLAMA_THREADS=3
-    LLAMA_PARALLEL=2
-    LLAMA_BATCH_THREADS=4
+if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/lib/common.sh" ]; then
+  source "$SCRIPT_DIR/lib/common.sh"
+  source "$SCRIPT_DIR/lib/install.sh"
 else
-    LLAMA_THREADS=2
-    LLAMA_PARALLEL=1
-    LLAMA_BATCH_THREADS=2
-fi
-echo "CPU threads: $THREADS"
-echo "Using llama threads: $LLAMA_THREADS"
-echo "Using batch threads: $LLAMA_BATCH_THREADS"
-echo "Using parallel slots: $LLAMA_PARALLEL"
-
-echo "=== Cloning llama.cpp (official ggml-org) ==="
-# Wipe any partial/stale clone so re-runs always start fresh
-sudo rm -rf "$LLAMA_DIR"
-sudo git clone https://github.com/ggml-org/llama.cpp.git "$LLAMA_DIR"
-
-# Fix ownership so current user can run git/cmake without sudo and without safe.directory issues
-sudo chown -R "$(id -u):$(id -g)" "$LLAMA_DIR"
-
-cd "$LLAMA_DIR"
-git fetch --tags
-
-LATEST_TAG=$(git tag | grep -E '^b[0-9]{4,}$' | sort -t b -k2 -n | tail -1)
-echo "=== Checking out latest tag: $LATEST_TAG ==="
-git checkout "$LATEST_TAG"
-echo "Building at: $(git describe --tags)"
-
-echo "=== Building llama.cpp ==="
-cmake -B build \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DGGML_NATIVE=ON
-cmake --build build -j"$(nproc)"
-
-LLAMA_BIN="${LLAMA_DIR}/build/bin/llama-server"
-if [ ! -f "$LLAMA_BIN" ]; then
-    echo "ERROR: llama-server binary not found at $LLAMA_BIN — build failed."
-    exit 1
-fi
-echo "Binary OK: $LLAMA_BIN"
-
-echo "=== Downloading model ==="
-sudo mkdir -p "$MODEL_DIR"
-cd "$MODEL_DIR"
-if [ ! -f model.gguf ]; then
-    sudo wget --show-progress -O model.gguf "$MODEL_URL"
-fi
-if [ ! -f mmproj.gguf ]; then
-    sudo wget --show-progress -O mmproj.gguf "$MMPROJ_URL"
-fi
-
-echo "=== Creating systemd service ==="
-sudo tee /etc/systemd/system/${SERVICE_NAME}.service >/dev/null <<EOF
-[Unit]
-Description=LFM2 OCR API
-After=network.target
-
-[Service]
-Type=simple
-User=root
-WorkingDirectory=${LLAMA_DIR}
-ExecStart=${LLAMA_BIN} \
-  -m ${MODEL_DIR}/model.gguf \
-  --mmproj ${MODEL_DIR}/mmproj.gguf \
-  --host 0.0.0.0 \
-  --port 8000 \
-  -c 2048 \
-  -t ${LLAMA_THREADS} \
-  -tb ${LLAMA_BATCH_THREADS} \
-  -np ${LLAMA_PARALLEL} \
-  -b 1024 \
-  -ub 512 \
-  --metrics \
-  -fa auto
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-echo "=== Reloading systemd ==="
-sudo systemctl daemon-reload
-
-echo "=== Enabling service ==="
-sudo systemctl enable ${SERVICE_NAME}
-
-echo "=== Starting service ==="
-sudo systemctl restart ${SERVICE_NAME}
-
-echo "=== Waiting for startup (polling up to 90s) ==="
-STARTED=0
-for i in $(seq 1 30); do
-    if curl -sf http://127.0.0.1:8000/health >/dev/null 2>&1; then
-        echo "Service is up after ~$((i * 3))s"
-        STARTED=1
-        break
+  # curl|bash path: fetch the libs from the repo using plain curl/wget.
+  _lib_dir="$(mktemp -d)"
+  # shellcheck disable=SC2064
+  trap "rm -rf '$_lib_dir'" EXIT
+  printf '[INFO] Downloading shared library (curl|bash mode)\n' >&2
+  for f in common.sh install.sh; do
+    if command -v curl >/dev/null 2>&1; then
+      curl -fsSL -o "$_lib_dir/$f" "$LFM_REPO_BASE/lib/$f" \
+        || { echo "FATAL: could not fetch lib/$f from $LFM_REPO_BASE" >&2; exit 1; }
+    elif command -v wget >/dev/null 2>&1; then
+      wget -q -O "$_lib_dir/$f" "$LFM_REPO_BASE/lib/$f" \
+        || { echo "FATAL: could not fetch lib/$f from $LFM_REPO_BASE" >&2; exit 1; }
+    else
+      echo "FATAL: curl or wget required" >&2; exit 1
     fi
-    echo "  waiting... ($((i * 3))s)"
-    sleep 3
-done
-
-if [ "$STARTED" -eq 0 ]; then
-    echo "WARNING: Service did not respond in 90s. Check logs:"
-    echo "  sudo journalctl -u ${SERVICE_NAME} -n 50 --no-pager"
+  done
+  source "$_lib_dir/common.sh"
+  source "$_lib_dir/install.sh"
+  LFM_ENTRY_DIR=""
 fi
 
-echo "=== Health Check ==="
-curl -s http://127.0.0.1:8000/health || true
-echo
+# =============================================================================
+# Preset: build = compile llama.cpp for best perf
+# =============================================================================
+PRESET_NAME="build"
+PRESET_TAGLINE="Compiles llama.cpp from source with native CPU flags. 5-10 min build."
+PRESET_STATUS_PAGE="true"
+PRESET_OPENWEBUI="false"
 
-echo "=== Metrics Check ==="
-curl -s http://127.0.0.1:8000/metrics | head || true
-echo
+# Build from source. The result lands in /opt/lfm-vision/src/llama.cpp/build/bin/llama-server
+LLAMA_SRC_DIR="$LFM_INSTALL_ROOT/src/llama.cpp"
 
-echo "=== DONE ==="
-echo "API:     http://SERVER_IP:8000/v1/chat/completions"
-echo "Metrics: http://SERVER_IP:8000/metrics"
-echo "Logs:    sudo journalctl -u ${SERVICE_NAME} -f"
+install_llama_strategy() {
+  local release="$1" arch="$2"
+  log_step "Building llama.cpp ${release} from source for ${arch}"
+  log_warn "This will take 5-10 minutes depending on your CPU."
+
+  # Build deps (in addition to base install_dependencies)
+  lfm_sudo apt-get install -y --no-install-recommends \
+    build-essential cmake git pkg-config libcurl4-openssl-dev
+
+  lfm_sudo rm -rf "$LLAMA_SRC_DIR"
+  lfm_sudo mkdir -p "$(dirname "$LLAMA_SRC_DIR")"
+  lfm_sudo git clone https://github.com/ggml-org/llama.cpp.git "$LLAMA_SRC_DIR"
+  lfm_sudo chown -R "$(id -u):$(id -g)" "$LLAMA_SRC_DIR"
+
+  (
+    cd "$LLAMA_SRC_DIR"
+    git fetch --tags --quiet
+    if git rev-parse "$release" >/dev/null 2>&1; then
+      git checkout "$release"
+    else
+      log_warn "Release $release not found in repo; staying on default branch"
+    fi
+    log_info "Building $(git describe --tags --always 2>/dev/null || echo 'HEAD')"
+  )
+
+  cmake -S "$LLAMA_SRC_DIR" -B "$LLAMA_SRC_DIR/build" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DGGML_NATIVE=ON \
+    -DCMAKE_INSTALL_PREFIX="$LFM_BIN_DIR" \
+    >/dev/null
+  cmake --build "$LLAMA_SRC_DIR/build" -j"$(lfm_detect_cpu_threads)"
+
+  local bin="$LLAMA_SRC_DIR/build/bin/llama-server"
+  [ -x "$bin" ] || die "llama-server binary not produced at $bin"
+
+  # Stage the binary + shared libs into the canonical install dir
+  lfm_sudo rm -rf "$LFM_BIN_DIR"
+  lfm_sudo mkdir -p "$LFM_BIN_DIR"
+  lfm_sudo install -m 755 "$bin" "$LFM_BIN_DIR/llama-server"
+  # Copy any required shared libs alongside the binary
+  lfm_sudo cp -a "$LLAMA_SRC_DIR/build/bin/." "$LFM_BIN_DIR/" 2>/dev/null || true
+
+  log_ok "Built and staged: $LFM_BIN_DIR/llama-server"
+  LFM_LLAMA_BIN="$LFM_BIN_DIR/llama-server"
+  LFM_LLAMA_RELEASE="$release"
+}
+
+main_dispatch "$@"

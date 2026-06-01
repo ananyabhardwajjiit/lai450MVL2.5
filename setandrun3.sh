@@ -1,105 +1,97 @@
 #!/usr/bin/env bash
+# setandrun3.sh - lfm-vision CUSTOM BINARY installer
+#
+# What it installs:
+#   - llama-server binary from THIS PROJECT's own release (not upstream)
+#   - Liquid AI 450M vision model
+#   - Status page on :80
+#   - OpenWebUI on :8080 (optional)
+#
+# Why use a custom release instead of upstream:
+#   - The project's binary is built with flags optimized for the LFM2.5-VL
+#     model specifically (e.g. specific CUDA arches, MKL, custom quantization).
+#   - Faster install (no 5-10 min compile) and consistent behavior across hosts.
+#
+# Trade-off: depends on the project maintaining a release; if the release is
+# stale, the upstream install (setandrunall.sh) is safer.
+#
+# For the upstream prebuilt, see setandrunall.sh.
+# For building from source, see setandrun2.sh.
+#
+# Usage:
+#   ./setandrun3.sh
+#   ./setandrun3.sh --with-openwebui
+#   ./setandrun3.sh --update
+#   ./setandrun3.sh --uninstall
+#
 set -Eeuo pipefail
 
-MODEL_URL="https://huggingface.co/LiquidAI/LFM2.5-VL-450M-GGUF/resolve/main/LFM2.5-VL-450M-F16.gguf"
-MMPROJ_URL="https://huggingface.co/LiquidAI/LFM2.5-VL-450M-GGUF/resolve/main/mmproj-LFM2.5-VL-450m-F16.gguf"
-BINARY_URL="https://github.com/ananyabhardwajjiit/lai450MVL2.5/releases/download/v1.0/llama-server-bin.tar.gz"
-MODEL_DIR="/opt/lfm2"
-LLAMA_DIR="/opt/llama.cpp"
-SERVICE_NAME="lfm2-ocr"
+case "${BASH_SOURCE[0]:-}" in
+  /dev/stdin|"") SCRIPT_DIR="" ;;
+  *)            SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" ;;
+esac
+LFM_REPO_BASE="https://raw.githubusercontent.com/ananyabhardwajjiit/lai450MVL2.5/main"
+LFM_ENTRY_DIR="${SCRIPT_DIR:-}"
 
-echo "=== Installing dependencies ==="
-sudo apt-get update -qq
-sudo apt-get install -y curl wget libgomp1
-
-echo "=== Detecting CPU ==="
-THREADS=$(nproc)
-if [ "$THREADS" -ge 4 ]; then
-    LLAMA_THREADS=3
-    LLAMA_PARALLEL=2
-    LLAMA_BATCH_THREADS=4
+if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/lib/common.sh" ]; then
+  source "$SCRIPT_DIR/lib/common.sh"
+  source "$SCRIPT_DIR/lib/install.sh"
 else
-    LLAMA_THREADS=2
-    LLAMA_PARALLEL=1
-    LLAMA_BATCH_THREADS=2
-fi
-echo "CPU threads: $THREADS | llama: $LLAMA_THREADS | batch: $LLAMA_BATCH_THREADS | parallel: $LLAMA_PARALLEL"
-
-echo "=== Downloading llama-server binaries ==="
-sudo rm -rf "$LLAMA_DIR"
-sudo mkdir -p "$LLAMA_DIR"
-sudo chown "$(id -u):$(id -g)" "$LLAMA_DIR"
-cd "$LLAMA_DIR"
-wget -q --show-progress -O bin.tar.gz "$BINARY_URL"
-tar -xzf bin.tar.gz
-rm bin.tar.gz
-LLAMA_BIN="${LLAMA_DIR}/bin/llama-server"
-echo "Binary OK: $LLAMA_BIN"
-
-echo "=== Downloading model ==="
-sudo mkdir -p "$MODEL_DIR"
-cd "$MODEL_DIR"
-if [ ! -f model.gguf ]; then
-    sudo wget --show-progress -O model.gguf "$MODEL_URL"
-fi
-if [ ! -f mmproj.gguf ]; then
-    sudo wget --show-progress -O mmproj.gguf "$MMPROJ_URL"
-fi
-
-echo "=== Creating systemd service ==="
-sudo tee /etc/systemd/system/${SERVICE_NAME}.service >/dev/null <<EOF
-[Unit]
-Description=LFM2 OCR API
-After=network.target
-
-[Service]
-Type=simple
-User=root
-WorkingDirectory=${LLAMA_DIR}/bin
-Environment=LD_LIBRARY_PATH=${LLAMA_DIR}/bin
-ExecStart=${LLAMA_BIN} \
-  -m ${MODEL_DIR}/model.gguf \
-  --mmproj ${MODEL_DIR}/mmproj.gguf \
-  --host 0.0.0.0 \
-  --port 8000 \
-  -c 2048 \
-  -t ${LLAMA_THREADS} \
-  -tb ${LLAMA_BATCH_THREADS} \
-  -np ${LLAMA_PARALLEL} \
-  -b 1024 \
-  -ub 512 \
-  --metrics \
-  -fa auto
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-echo "=== Starting service ==="
-sudo systemctl daemon-reload
-sudo systemctl enable ${SERVICE_NAME}
-sudo systemctl restart ${SERVICE_NAME}
-
-echo "=== Waiting for startup (polling up to 90s) ==="
-STARTED=0
-for i in $(seq 1 30); do
-    if curl -sf http://127.0.0.1:8000/health >/dev/null 2>&1; then
-        echo "Service is up after ~$((i * 3))s"
-        STARTED=1
-        break
+  # curl|bash path: fetch the libs from the repo using plain curl/wget.
+  _lib_dir="$(mktemp -d)"
+  # shellcheck disable=SC2064
+  trap "rm -rf '$_lib_dir'" EXIT
+  printf '[INFO] Downloading shared library (curl|bash mode)\n' >&2
+  for f in common.sh install.sh; do
+    if command -v curl >/dev/null 2>&1; then
+      curl -fsSL -o "$_lib_dir/$f" "$LFM_REPO_BASE/lib/$f" \
+        || { echo "FATAL: could not fetch lib/$f from $LFM_REPO_BASE" >&2; exit 1; }
+    elif command -v wget >/dev/null 2>&1; then
+      wget -q -O "$_lib_dir/$f" "$LFM_REPO_BASE/lib/$f" \
+        || { echo "FATAL: could not fetch lib/$f from $LFM_REPO_BASE" >&2; exit 1; }
+    else
+      echo "FATAL: curl or wget required" >&2; exit 1
     fi
-    echo "  waiting... ($((i * 3))s)"
-    sleep 3
-done
-
-if [ "$STARTED" -eq 0 ]; then
-    echo "WARNING: Service did not respond in 90s. Check logs:"
-    echo "  sudo journalctl -u ${SERVICE_NAME} -n 50 --no-pager"
+  done
+  source "$_lib_dir/common.sh"
+  source "$_lib_dir/install.sh"
+  LFM_ENTRY_DIR=""
 fi
 
-echo "=== DONE ==="
-echo "API:     http://$(curl -s ifconfig.me):8000/v1/chat/completions"
-echo "Metrics: http://$(curl -s ifconfig.me):8000/metrics"
-echo "Logs:    sudo journalctl -u ${SERVICE_NAME} -f"
+# =============================================================================
+# Preset: prebuilt = project's own optimized binary
+# =============================================================================
+PRESET_NAME="prebuilt"
+PRESET_TAGLINE="Uses the project's own prebuilt llama-server release (faster, model-tuned)."
+PRESET_STATUS_PAGE="true"
+PRESET_OPENWEBUI="false"
+
+# Map arch to the project's release asset name
+CUSTOM_RELEASE_BASE="https://github.com/ananyabhardwajjiit/lai450MVL2.5/releases/download/v1.0"
+CUSTOM_ASSET_NAME="llama-server-bin.tar.gz"
+
+install_llama_strategy() {
+  local release="$1" arch="$2"
+  local url="${CUSTOM_RELEASE_BASE}/${CUSTOM_ASSET_NAME}"
+  log_step "Downloading custom-built llama-server from project release"
+  log_info "URL: $url"
+  log_warn "(If this URL is stale, the upstream prebuilt install is safer.)"
+
+  local tmpdir
+  tmpdir="$(mktemp -d)"
+  # shellcheck disable=SC2064
+  trap "rm -rf '$tmpdir'" RETURN
+
+  lfm_download "$url" "$tmpdir/llama.tar.gz"
+  lfm_sudo rm -rf "$LFM_BIN_DIR"
+  lfm_sudo mkdir -p "$LFM_BIN_DIR"
+  lfm_sudo tar -xzf "$tmpdir/llama.tar.gz" -C "$LFM_BIN_DIR"
+
+  local bin="$LFM_BIN_DIR/llama-server"
+  [ -x "$bin" ] || die "llama-server binary not found at $bin after extract"
+  log_ok "llama-server ready: $bin"
+  LFM_LLAMA_BIN="$bin"
+  LFM_LLAMA_RELEASE="custom-v1.0"
+}
+
+main_dispatch "$@"

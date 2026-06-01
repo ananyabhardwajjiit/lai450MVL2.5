@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>lfm-vision · local AI</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <h1>lfm-vision</h1>
+      <span class="tag">self-hosted vision AI</span>
+    </div>
+    <div class="status-pill" id="status-pill">
+      <span class="dot" id="status-dot"></span>
+      <span id="status-text">connecting…</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <h2>Your local Liquid AI 450M vision model is <span id="hero-status">starting up</span></h2>
+      <p class="lede">
+        An OpenAI-compatible API is running on this machine.
+        Send images and text to <code id="api-endpoint">http://&lt;host&gt;:8000/v1/chat/completions</code>
+        or open the chat UI.
+      </p>
+      <div class="actions">
+        <a id="openwebui-link" class="btn primary" href="#" style="display:none">Open chat UI →</a>
+        <a id="docs-link" class="btn" href="https://github.com/ananyabhardwajjiit/lai450MVL2.5" target="_blank" rel="noopener">Docs &amp; examples</a>
+        <a id="metrics-link" class="btn ghost" href="/api/metrics">Metrics</a>
+      </div>
+    </section>
+
+    <section class="grid">
+      <div class="card">
+        <h3>Model</h3>
+        <dl>
+          <dt>Loaded</dt><dd id="card-model">—</dd>
+          <dt>Architecture</dt><dd id="card-arch">—</dd>
+          <dt>Context</dt><dd id="card-ctx">—</dd>
+          <dt>Threads</dt><dd id="card-threads">—</dd>
+          <dt>Parallel slots</dt><dd id="card-parallel">—</dd>
+        </dl>
+      </div>
+
+      <div class="card">
+        <h3>System</h3>
+        <dl>
+          <dt>Host</dt><dd id="card-host">—</dd>
+          <dt>CPU</dt><dd id="card-cpu">—</dd>
+          <dt>RAM</dt><dd id="card-ram">—</dd>
+          <dt>GPU</dt><dd id="card-gpu">—</dd>
+          <dt>Uptime</dt><dd id="card-uptime">—</dd>
+        </dl>
+      </div>
+
+      <div class="card">
+        <h3>Traffic</h3>
+        <dl>
+          <dt>Requests served</dt><dd id="card-requests">—</dd>
+          <dt>Tokens / sec (avg)</dt><dd id="card-tps">—</dd>
+          <dt>Active requests</dt><dd id="card-active">—</dd>
+          <dt>Last request</dt><dd id="card-last">never</dd>
+        </dl>
+      </div>
+    </section>
+
+    <section class="card wide">
+      <h3>Try it</h3>
+      <p class="muted">Send a text-only prompt to the local API. The response comes from your own machine.</p>
+      <form id="try-form">
+        <textarea id="try-prompt" rows="3" placeholder="Ask the model something…">Describe the color of the sky in one sentence.</textarea>
+        <div class="row">
+          <button class="btn primary" type="submit">Send</button>
+          <span id="try-status" class="muted"></span>
+        </div>
+      </form>
+      <pre id="try-output" class="output"></pre>
+    </section>
+
+    <section class="card wide">
+      <h3>Service</h3>
+      <dl class="cols">
+        <dt>API service</dt><dd><code id="svc-api">lfm-vision-api</code></dd>
+        <dt>Status service</dt><dd><code id="svc-status">lfm-vision-status</code></dd>
+        <dt>Web UI service</dt><dd><code id="svc-webui">lfm-vision-webui</code></dd>
+        <dt>Install root</dt><dd><code>/opt/lfm-vision</code></dd>
+        <dt>Data root</dt><dd><code>/var/lib/lfm-vision</code></dd>
+        <dt>Config</dt><dd><code>/etc/lfm-vision/config.yaml</code></dd>
+        <dt>Logs</dt><dd><code>journalctl -u lfm-vision-api -f</code></dd>
+      </dl>
+    </section>
+  </main>
+
+  <footer>
+    <span>lfm-vision · running on your hardware, for your eyes only</span>
+  </footer>
+
+  <script src="/app.js" defer></script>
+</body>
+</html>
